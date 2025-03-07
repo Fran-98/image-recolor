@@ -3,7 +3,7 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from network.context import get_yolo_context, num_classes, swin_extractor
+from network.context import get_yolo_context, num_classes
 
 ########################
 # Bloques para la UNET #
