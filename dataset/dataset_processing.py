@@ -29,11 +29,11 @@ def process_image(image_path, out_gray_path, out_color_path):
         image_path,
         None,  # No se guarda automáticamente, lo haremos con PIL.
         black_and_white=True,
-        high_contrast_black_and_white=True,
+        high_contrast_black_and_white=False,
         apply_sepia=False,
-        apply_vintage=True,
+        apply_vintage=0,
         apply_grain=False,
-        noise_level=100
+        noise_level=0
     )
     
     # Guardar la imagen en escala de grises en el directorio de salida

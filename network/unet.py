@@ -3,7 +3,7 @@ import torch.nn as nn
 
 import torch.nn.functional as F
 
-from nn.context import get_yolo_context
+from network.context import get_yolo_context, num_classes, swin_extractor
 
 ########################
 # Bloques para la UNET #
@@ -109,7 +109,6 @@ class FiLM(nn.Module):
         beta = beta.unsqueeze(2).unsqueeze(3)
         return features * gamma + beta
 
-
 #########################
 # Definicion de la UNET #
 #########################
@@ -126,7 +125,7 @@ class UNet(nn.Module):
     - context_dim: dimensión del vector de contexto salido de yolo.
     - bilinear: si se utiliza upsampling bilineal o convolución transpuesta.
     """
-    def __init__(self, n_channels, n_classes, context_dim, bilinear=True):
+    def __init__(self, n_channels, n_classes, bilinear=True):
         super(UNet, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
@@ -138,39 +137,83 @@ class UNet(nn.Module):
         self.down1 = Down(base_channels, base_channels * 2)
         self.down2 = Down(base_channels * 2, base_channels * 4)
         self.down3 = Down(base_channels * 4, base_channels * 8)
+        # factor = 2 if bilinear else 1
+        # self.down4 = Down(base_channels * 8, base_channels * 16 // factor)
+
+        self.down4 = Down(base_channels * 8, base_channels * 16 )
         factor = 2 if bilinear else 1
-        self.down4 = Down(base_channels * 8, base_channels * 16 // factor)
+        self.down5 = Down(base_channels * 16, base_channels * 32 // factor)
         
         # Bottleneck
-        self.bottleneck = DoubleConv(base_channels * 16 // factor, base_channels * 16 // factor)
-        self.film = FiLM(num_features=base_channels * 16 // factor, context_dim=context_dim)
+        #self.bottleneck = DoubleConv(base_channels * 16 // factor, base_channels * 16 // factor)
+        self.bottleneck = DoubleConv(base_channels * 32 // factor, base_channels * 32 // factor)
+        # self.film = FiLM(num_features=base_channels * 16 // factor, context_dim=num_classes)
+        self.film = FiLM(num_features=base_channels * 32 // factor, context_dim=num_classes)
         
         # Decoder
+        self.up0 = Up(base_channels * 32, base_channels * 16 // factor, bilinear)
+
         self.up1 = Up(base_channels * 16, base_channels * 8 // factor, bilinear)
         self.up2 = Up(base_channels * 8, base_channels * 4 // factor, bilinear)
         self.up3 = Up(base_channels * 4, base_channels * 2 // factor, bilinear)
         self.up4 = Up(base_channels * 2, base_channels, bilinear)
-        self.outc = nn.Conv2d(base_channels, n_classes, kernel_size=1)
+        self.outc = nn.Sequential(
+            nn.Conv2d(base_channels, n_classes, kernel_size=1),
+            nn.Sigmoid()
+            )
         
     def forward(self, x):
         """Recibe la imagen x"""
+        # x1 = self.inc(x)
+        # x2 = self.down1(x1)
+        # x3 = self.down2(x2)
+        # x4 = self.down3(x3)
+        # x5 = self.down4(x4)
+        
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        
+        x6 = self.down5(x5)
+
         # Bottleneck con modulación FiLM
-        x_bottleneck = self.bottleneck(x5)
+        # x_bottleneck = self.bottleneck(x5)
+        x_bottleneck = self.bottleneck(x6)
         x_bottleneck = self.film(x_bottleneck, get_yolo_context(x))
+        # x_bottleneck = self.film(x_bottleneck, swin_extractor(x)[1])
         
         # Decoder con skip connections y attention gates
-        x = self.up1(x_bottleneck, x4)
+        # x = self.up1(x_bottleneck, x4)
+        # x = self.up2(x, x3)
+        # x = self.up3(x, x2)
+        # x = self.up4(x, x1)
+
+        x = self.up0(x_bottleneck, x5)
+        x = self.up1(x, x4)
         x = self.up2(x, x3)
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         
         logits = self.outc(x)
         return logits
-
-
+    
+    def initialize_weights(self): # NO USAR
+        """
+        Inicializa los pesos del modelo:
+        - Para capas convolucionales y transpuestas, usa Kaiming Normal.
+        - Para BatchNorm, inicializa la escala a 1 y el sesgo a 0.
+        - Para capas lineales, también usa Kaiming Normal.
+        """
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)

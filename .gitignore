@@ -1,8 +1,12 @@
 *.jpg
+checkpoints*
 todas/
 imgs_*/
 dataset_images/
 checkpoints/
+yolo11n*
+debug*
+validation_epoch*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

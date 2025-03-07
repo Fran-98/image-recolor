@@ -17,6 +17,12 @@ Some changes were made to the UNET so it can perform the task better, such as ad
 - [Colorful Image Colorization](https://arxiv.org/abs/1603.08511)
 - [Attention U-Net: Learning Where to Look for the Pancreas](https://arxiv.org/abs/1804.03999)
 - [FiLM: Visual Reasoning with a General Conditioning Layer](https://arxiv.org/abs/1709.07871)
+- [Perceptual Losses for Real-Time Style Transfer and Super-Resolution](https://arxiv.org/abs/1603.08155)
 
 ## Extras
 As the final and intended use of the neural network is for recoloring vintage photos a proccesing library was needed to transform modern photos into black and white vintage photos. As there was no open source solution for this, an alternative was created and is available on [pypi](https://pypi.org/project/vintager/) and [github](https://github.com/Fran-98/vintager) as "vintager".
+
+
+## TODO
+- [ ] Limpiar readme y completarlo
+- [ ]
