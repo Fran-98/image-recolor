@@ -12,6 +12,13 @@ Some changes were made to the UNET so it can perform the task better, such as ad
 - https://www.kaggle.com/datasets/balraj98/monet2photo
 - https://www.kaggle.com/datasets/balraj98/summer2winter-yosemite
 - https://www.kaggle.com/datasets/marcinrutecki/old-photos
+- https://www.kaggle.com/datasets/rafsunahmad/camera-photos-vs-ai-generated-photos-classifier
+- https://www.kaggle.com/datasets/prasunroy/natural-images
+- https://www.kaggle.com/datasets/deeptrial/miniimagenet
+- https://www.kaggle.com/datasets/akash2sharma/tiny-imagenet
+- https://www.kaggle.com/datasets/alessandrasala79/ai-vs-human-generated-dataset
+
+All those datasets where cleaned to make sure that there are not replicated imgs, no black and white imgs or imgs that could damage the model performance.
 
 ## Related works
 - [Colorful Image Colorization](https://arxiv.org/abs/1603.08511)
@@ -25,4 +32,6 @@ As the final and intended use of the neural network is for recoloring vintage ph
 
 ## TODO
 - [ ] Limpiar readme y completarlo
-- [ ]
+- [x] Soft encode y decode
+- [x] Dataset
+- [ ] 

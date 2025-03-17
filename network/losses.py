@@ -53,13 +53,17 @@ class VGGPerceptualLoss(nn.Module):
         loss += nn.functional.l1_loss(x4, y4)
         return loss
     
-def gradient_difference_loss(pred, target):
-    dy_pred = torch.abs(pred[:, :, 1:, :] - pred[:, :, :-1, :])
-    dx_pred = torch.abs(pred[:, :, :, 1:] - pred[:, :, :, :-1])
-    dy_target = torch.abs(target[:, :, 1:, :] - target[:, :, :-1, :])
-    dx_target = torch.abs(target[:, :, :, 1:] - target[:, :, :, :-1])
-    return torch.mean(torch.abs(dx_pred - dx_target)) + torch.mean(torch.abs(dy_pred - dy_target))
+def gradient_loss(pred, target):
+    pred_dx = pred[:, :, :, :-1] - pred[:, :, :, 1:]
+    pred_dy = pred[:, :, :-1, :] - pred[:, :, 1:, :]
+
+    target_dx = target[:, :, :, :-1] - target[:, :, :, 1:]
+    target_dy = target[:, :, :-1, :] - target[:, :, 1:, :]
+
+    loss = torch.mean(torch.abs(pred_dx - target_dx)) + torch.mean(torch.abs(pred_dy - target_dy))
+    return loss
 
 def total_variation_loss(x):
     return torch.mean(torch.abs(x[:, :, :-1, :] - x[:, :, 1:, :])) + \
            torch.mean(torch.abs(x[:, :, :, :-1] - x[:, :, :, 1:]))
+

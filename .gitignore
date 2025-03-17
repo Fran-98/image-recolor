@@ -7,6 +7,12 @@ checkpoints/
 yolo11n*
 debug*
 validation_epoch*
+*todas*
+*128*
+*256*
+*dataset_images*
+*descarte*
+*recuadros*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

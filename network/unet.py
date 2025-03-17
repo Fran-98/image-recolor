@@ -19,14 +19,40 @@ class DoubleConv(nn.Module):
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
+            # nn.InstanceNorm2d(out_channels),
+            # nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
+
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            # nn.InstanceNorm2d(out_channels),
+            # nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
         )
     def forward(self, x):
         return self.double_conv(x)
 
+class BottleNeck(nn.Module):
+    """Bloque de dos convoluciones seguidas de BatchNorm y ReLU."""
+    def __init__(self, in_channels, out_channels):
+        super(BottleNeck, self).__init__()
+        self.double_conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(inplace=True),
+            
+        )
+    def forward(self, x):
+        return self.double_conv(x)
+    
 class Down(nn.Module):
     """Bloque de downsampling con max pooling seguido de DoubleConv."""
     def __init__(self, in_channels, out_channels):
@@ -96,7 +122,10 @@ class Up(nn.Module):
 class FiLM(nn.Module):
     """
     Módulo FiLM que modula las activaciones en función de una condición.
-    Genera parámetros gamma y beta para escalar y desplazar las características.
+    Genera parámetros gamma y beta para escalar y desplazar las features.
+
+    FiLM: Feature-wise Linear Modulation
+    https://arxiv.org/pdf/1709.07871
     """
     def __init__(self, num_features, context_dim):
         super(FiLM, self).__init__()
@@ -109,13 +138,13 @@ class FiLM(nn.Module):
         beta = beta.unsqueeze(2).unsqueeze(3)
         return features * gamma + beta
 
-#########################
-# Definicion de la UNET #
-#########################
+################################
+# Definicion de la UNET clasif #
+################################
 
-class UNet(nn.Module):
+class UNetClasif(nn.Module):
     """
-    U-Net modificada para recolorización, que incorpora:
+    U-Net modificada para recolorización con colores quantizados, que incorpora:
     - Atención en las skip connections.
     - Modulación condicional con FiLM en el bottleneck.
 
@@ -125,33 +154,33 @@ class UNet(nn.Module):
     - context_dim: dimensión del vector de contexto salido de yolo.
     - bilinear: si se utiliza upsampling bilineal o convolución transpuesta.
     """
-    def __init__(self, n_channels, n_classes, bilinear=True):
-        super(UNet, self).__init__()
+    def __init__(self, n_channels, n_classes, bilinear=True, dropout_rate=0.1):
+        super(UNetClasif, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
         self.bilinear = bilinear
-        base_channels = 64
+        base_channels = 128
         
         # Encoder
         self.inc = DoubleConv(n_channels, base_channels)
         self.down1 = Down(base_channels, base_channels * 2)
         self.down2 = Down(base_channels * 2, base_channels * 4)
         self.down3 = Down(base_channels * 4, base_channels * 8)
-        # factor = 2 if bilinear else 1
-        # self.down4 = Down(base_channels * 8, base_channels * 16 // factor)
-
-        self.down4 = Down(base_channels * 8, base_channels * 16 )
         factor = 2 if bilinear else 1
-        self.down5 = Down(base_channels * 16, base_channels * 32 // factor)
+        self.down4 = Down(base_channels * 8, base_channels * 16 // factor)
         
         # Bottleneck
-        #self.bottleneck = DoubleConv(base_channels * 16 // factor, base_channels * 16 // factor)
-        self.bottleneck = DoubleConv(base_channels * 32 // factor, base_channels * 32 // factor)
-        # self.film = FiLM(num_features=base_channels * 16 // factor, context_dim=num_classes)
-        self.film = FiLM(num_features=base_channels * 32 // factor, context_dim=num_classes)
+        self.bottleneck = BottleNeck(base_channels * 16 // factor, base_channels * 16 // factor)
+        # self.bottleneck = DoubleConv(base_channels * 16 // factor, base_channels * 16 // factor)
+        # self.bottleneck = DoubleConv(base_channels * 32 // factor, base_channels * 32 // factor)
+
+        self.dropout = nn.Dropout2d(dropout_rate)
+
+        self.film = FiLM(num_features=base_channels * 16 // factor, context_dim=num_classes)
+        # self.film = FiLM(num_features=base_channels * 32 // factor, context_dim=num_classes)
         
         # Decoder
-        self.up0 = Up(base_channels * 32, base_channels * 16 // factor, bilinear)
+        # self.up0 = Up(base_channels * 32, base_channels * 16 // factor, bilinear)
 
         self.up1 = Up(base_channels * 16, base_channels * 8 // factor, bilinear)
         self.up2 = Up(base_channels * 8, base_channels * 4 // factor, bilinear)
@@ -159,61 +188,72 @@ class UNet(nn.Module):
         self.up4 = Up(base_channels * 2, base_channels, bilinear)
         self.outc = nn.Sequential(
             nn.Conv2d(base_channels, n_classes, kernel_size=1),
-            nn.Sigmoid()
             )
         
     def forward(self, x):
         """Recibe la imagen x"""
-        # x1 = self.inc(x)
-        # x2 = self.down1(x1)
-        # x3 = self.down2(x2)
-        # x4 = self.down3(x3)
-        # x5 = self.down4(x4)
-        
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        x6 = self.down5(x5)
+        
+        # x1 = self.inc(x)
+        # x2 = self.down1(x1)
+        # x3 = self.down2(x2)
+        # x4 = self.down3(x3)
+        # x5 = self.down4(x4)
+        # x6 = self.down5(x5)
 
         # Bottleneck con modulación FiLM
-        # x_bottleneck = self.bottleneck(x5)
-        x_bottleneck = self.bottleneck(x6)
+        x_bottleneck = self.bottleneck(x5)
+        x_bottleneck = self.dropout(x_bottleneck)
         x_bottleneck = self.film(x_bottleneck, get_yolo_context(x))
-        # x_bottleneck = self.film(x_bottleneck, swin_extractor(x)[1])
+        #Conexión residual
+        x_bottleneck = x_bottleneck + x5
+
         
         # Decoder con skip connections y attention gates
-        # x = self.up1(x_bottleneck, x4)
-        # x = self.up2(x, x3)
-        # x = self.up3(x, x2)
-        # x = self.up4(x, x1)
-
-        x = self.up0(x_bottleneck, x5)
-        x = self.up1(x, x4)
+        x = self.up1(x_bottleneck, x4)
         x = self.up2(x, x3)
         x = self.up3(x, x2)
         x = self.up4(x, x1)
+
+
         
         logits = self.outc(x)
         return logits
     
-    def initialize_weights(self): # NO USAR
+    def initialize_weights(self):
         """
         Inicializa los pesos del modelo:
-        - Para capas convolucionales y transpuestas, usa Kaiming Normal.
-        - Para BatchNorm, inicializa la escala a 1 y el sesgo a 0.
-        - Para capas lineales, también usa Kaiming Normal.
+        - Conv2d y ConvTranspose2d: Kaiming Normal con mode='fan_in'.
+        - Si la capa usa LeakyReLU, ajusta `nonlinearity='leaky_relu'`.
+        - Si la capa es parte del bottleneck, usa inicialización ortogonal.
+        - BatchNorm2d: Inicializa la escala en 1 y el sesgo en 0.
+        - Linear: Xavier Normal.
         """
         for m in self.modules():
             if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                # Verifica si la activación es LeakyReLU
+                nonlinearity = 'leaky_relu' if isinstance(getattr(m, 'activation', None), nn.LeakyReLU) else 'relu'
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity=nonlinearity)
+
+                # Si la capa tiene bias y no hay BatchNorm después, inicializa en 0
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
+
             elif isinstance(m, nn.BatchNorm2d):
+                # Inicialización de BatchNorm
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+
             elif isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                # Inicialización de capas lineales con Xavier Normal
+                nn.init.xavier_normal_(m.weight)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
+
+            # Inicialización ortogonal en la capa bottleneck
+            if isinstance(m, nn.Conv2d) and 'bottleneck' in m.__class__.__name__.lower():
+                nn.init.orthogonal_(m.weight)
